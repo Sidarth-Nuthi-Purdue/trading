@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WHOP Iframe Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .whop-frame {
+      width: 100%;
+      height: 800px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>WHOP Iframe Test Environment</h1>
+    <p>This page simulates how your app will appear when embedded in a WHOP iframe.</p>
+    
+    <iframe 
+      src="http://localhost:3000/dashboard" 
+      class="whop-frame" 
+      allow="camera; microphone; geolocation; clipboard-read; clipboard-write" 
+      allowfullscreen
+    ></iframe>
+  </div>
+</body>
+</html> 
