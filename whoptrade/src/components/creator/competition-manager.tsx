@@ -43,11 +43,9 @@ interface Competition {
   };
 }
 
-interface CompetitionManagerProps {
-  onStatsUpdate: () => void;
-}
+interface CompetitionManagerProps {}
 
-export default function CompetitionManager({ onStatsUpdate }: CompetitionManagerProps) {
+export default function CompetitionManager({}: CompetitionManagerProps) {
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -110,9 +108,8 @@ export default function CompetitionManager({ onStatsUpdate }: CompetitionManager
         const result = await response.json();
         console.log('Competition created:', result);
         
-        // Refresh competitions and stats
+        // Refresh competitions
         await loadCompetitions();
-        onStatsUpdate();
         
         // Reset form and close modal
         setNewCompetition({

@@ -157,171 +157,76 @@ export default function CreatorAuthPage() {
                   Sign in to your creator account or create a new one
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <Tabs defaultValue="login" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2 bg-gray-800">
-                    <TabsTrigger value="login" className="data-[state=active]:bg-gray-700">
-                      Sign In
-                    </TabsTrigger>
-                    <TabsTrigger value="register" className="data-[state=active]:bg-gray-700">
-                      Create Account
-                    </TabsTrigger>
-                  </TabsList>
+              <CardContent className="space-y-4">
+                {/* Success/Error Messages */}
+                {message && (
+                  <Alert className={`${
+                    message.type === 'success' 
+                      ? 'border-green-700 bg-green-900/20' 
+                      : 'border-red-700 bg-red-900/20'
+                  }`}>
+                    <AlertDescription className={
+                      message.type === 'success' ? 'text-green-400' : 'text-red-400'
+                    }>
+                      {message.text}
+                    </AlertDescription>
+                  </Alert>
+                )}
 
-                  {/* Success/Error Messages */}
-                  {message && (
-                    <Alert className={`mt-4 ${
-                      message.type === 'success' 
-                        ? 'border-green-700 bg-green-900/20' 
-                        : 'border-red-700 bg-red-900/20'
-                    }`}>
-                      <AlertDescription className={
-                        message.type === 'success' ? 'text-green-400' : 'text-red-400'
-                      }>
-                        {message.text}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {/* Login Tab */}
-                  <TabsContent value="login" className="space-y-4">
-                    <form onSubmit={handleLogin} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="login-email" className="text-gray-300">Email</Label>
-                        <Input
-                          id="login-email"
-                          type="email"
-                          value={loginData.email}
-                          onChange={(e) => setLoginData({...loginData, email: e.target.value})}
-                          placeholder="creator@example.com"
-                          className="bg-gray-800 border-gray-600 text-white"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="login-password" className="text-gray-300">Password</Label>
-                        <Input
-                          id="login-password"
-                          type="password"
-                          value={loginData.password}
-                          onChange={(e) => setLoginData({...loginData, password: e.target.value})}
-                          className="bg-gray-800 border-gray-600 text-white"
-                          required
-                        />
-                      </div>
-                      <Button 
-                        type="submit" 
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Signing In...
-                          </>
-                        ) : (
-                          <>
-                            <LogIn className="mr-2 h-4 w-4" />
-                            Sign In
-                          </>
-                        )}
-                      </Button>
-                    </form>
-                  </TabsContent>
-
-                  {/* Register Tab */}
-                  <TabsContent value="register" className="space-y-4">
-                    <form onSubmit={handleRegister} className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="first-name" className="text-gray-300">First Name</Label>
-                          <Input
-                            id="first-name"
-                            value={registerData.first_name}
-                            onChange={(e) => setRegisterData({...registerData, first_name: e.target.value})}
-                            placeholder="John"
-                            className="bg-gray-800 border-gray-600 text-white"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="last-name" className="text-gray-300">Last Name</Label>
-                          <Input
-                            id="last-name"
-                            value={registerData.last_name}
-                            onChange={(e) => setRegisterData({...registerData, last_name: e.target.value})}
-                            placeholder="Doe"
-                            className="bg-gray-800 border-gray-600 text-white"
-                            required
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="username" className="text-gray-300">Username</Label>
-                        <Input
-                          id="username"
-                          value={registerData.username}
-                          onChange={(e) => setRegisterData({...registerData, username: e.target.value})}
-                          placeholder="creator_username"
-                          className="bg-gray-800 border-gray-600 text-white"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="register-email" className="text-gray-300">Email</Label>
-                        <Input
-                          id="register-email"
-                          type="email"
-                          value={registerData.email}
-                          onChange={(e) => setRegisterData({...registerData, email: e.target.value})}
-                          placeholder="creator@example.com"
-                          className="bg-gray-800 border-gray-600 text-white"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="register-password" className="text-gray-300">Password</Label>
-                        <Input
-                          id="register-password"
-                          type="password"
-                          value={registerData.password}
-                          onChange={(e) => setRegisterData({...registerData, password: e.target.value})}
-                          placeholder="Must be at least 6 characters"
-                          className="bg-gray-800 border-gray-600 text-white"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="confirm-password" className="text-gray-300">Confirm Password</Label>
-                        <Input
-                          id="confirm-password"
-                          type="password"
-                          value={registerData.confirmPassword}
-                          onChange={(e) => setRegisterData({...registerData, confirmPassword: e.target.value})}
-                          className="bg-gray-800 border-gray-600 text-white"
-                          required
-                        />
-                      </div>
-                      <Button 
-                        type="submit" 
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Creating Account...
-                          </>
-                        ) : (
-                          <>
-                            <UserPlus className="mr-2 h-4 w-4" />
-                            Create Creator Account
-                          </>
-                        )}
-                      </Button>
-                    </form>
-                  </TabsContent>
-                </Tabs>
+                {/* Login Form */}
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className="text-gray-300">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={loginData.email}
+                      onChange={(e) => setLoginData({...loginData, email: e.target.value})}
+                      placeholder="admin@whoptrade.com"
+                      className="bg-gray-800 border-gray-600 text-white"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-gray-300">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={loginData.password}
+                      onChange={(e) => setLoginData({...loginData, password: e.target.value})}
+                      placeholder="password"
+                      className="bg-gray-800 border-gray-600 text-white"
+                      required
+                    />
+                  </div>
+                  
+                  {/* Demo Credentials */}
+                  <div className="bg-gray-800 p-3 rounded border border-gray-600">
+                    <p className="text-xs text-gray-300 mb-2 font-medium">Demo Credentials:</p>
+                    <div className="text-xs text-gray-400 space-y-1">
+                      <div><strong>Admin:</strong> admin@whoptrade.com / password</div>
+                      <div><strong>Demo:</strong> creator@example.com / password</div>
+                    </div>
+                  </div>
+                  
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Signing In...
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="mr-2 h-4 w-4" />
+                        Sign In to Creator Dashboard
+                      </>
+                    )}
+                  </Button>
+                </form>
               </CardContent>
             </Card>
           </div>

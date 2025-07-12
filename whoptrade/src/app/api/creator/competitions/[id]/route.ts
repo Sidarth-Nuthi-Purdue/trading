@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
@@ -15,7 +15,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const competitionId = params.id;
+    const resolvedParams = await params;
+    const competitionId = resolvedParams.id;
 
     // Get competition details
     const { data: competition, error: competitionError } = await supabase
@@ -58,29 +59,8 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Get leaderboard data
-    const { data: leaderboard, error: leaderboardError } = await supabase
-      .from('competition_leaderboard')
-      .select(`
-        user_id,
-        username,
-        first_name,
-        last_name,
-        starting_balance,
-        current_balance,
-        total_pnl,
-        pnl_percentage,
-        rank,
-        status,
-        joined_at,
-        updated_at
-      `)
-      .eq('competition_id', competitionId)
-      .order('rank', { ascending: true });
-
-    if (leaderboardError) {
-      console.error('Error fetching leaderboard:', leaderboardError);
-    }
+    // Leaderboard data removed - using Whop's leaderboard features instead
+    const leaderboard = [];
 
     // Get participant count
     const { data: participants, error: participantError } = await supabase
@@ -114,7 +94,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
@@ -125,7 +105,8 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const competitionId = params.id;
+    const resolvedParams = await params;
+    const competitionId = resolvedParams.id;
     const updateData = await request.json();
 
     // Verify user owns this competition
@@ -177,7 +158,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
@@ -188,7 +169,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const competitionId = params.id;
+    const resolvedParams = await params;
+    const competitionId = resolvedParams.id;
 
     // Verify user owns this competition
     const { data: competition, error: competitionError } = await supabase

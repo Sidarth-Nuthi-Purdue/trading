@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
+import { getWhopAuthHeaders, isWhopAuthenticated } from '@/lib/whop-supabase-bridge';
 import { 
   ArrowUp, 
   ArrowDown,
@@ -79,17 +80,78 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const checkAuth = async () => {
+      // For testing, set up a mock Whop user
+      const testWhopUserId = 'lpRuDNk8Npniv';
+      if (!localStorage.getItem('whop_user_id')) {
+        localStorage.setItem('whop_user_id', testWhopUserId);
+        console.log('Set test Whop user ID:', testWhopUserId);
+      }
+      
+      // First check if we have a Whop session stored
+      if (isWhopAuthenticated()) {
+        console.log('Using existing Whop authentication');
+        const authData = JSON.parse(localStorage.getItem('supabase.auth.token') || '{}');
+        if (authData.user) {
+          setUser(authData.user);
+          await loadDashboardData();
+          await loadRecentOrders(1, ordersPerPage);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Check regular Supabase session
       const { data: { session } } = await supabase.auth.getSession();
       
-      if (!session) {
-        router.push('/login');
+      if (session) {
+        setUser(session.user);
+        await loadDashboardData();
+        await loadRecentOrders(1, ordersPerPage);
+        setLoading(false);
         return;
       }
 
-      setUser(session.user);
-      await loadDashboardData();
-      await loadRecentOrders(1, ordersPerPage); // Load first page
-      setLoading(false);
+      // No existing session - try to create Whop session bridge
+      try {
+        console.log('No session found, attempting Whop authentication bridge...');
+        const whopResponse = await fetch('/api/auth/whop-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (whopResponse.ok) {
+          const data = await whopResponse.json();
+          console.log('Whop session bridge successful:', data.user.id);
+
+          // Store session data
+          if (data.session) {
+            const authData = {
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+              expires_at: data.session.expires_at,
+              user: data.user
+            };
+
+            localStorage.setItem('supabase.auth.token', JSON.stringify(authData));
+            (window as any).supabaseSession = data.session;
+            
+            setUser(data.user);
+            await loadDashboardData();
+            await loadRecentOrders(1, ordersPerPage);
+            setLoading(false);
+            return;
+          }
+        } else {
+          console.log('Whop authentication failed, redirecting to login');
+        }
+      } catch (error) {
+        console.error('Error with Whop authentication bridge:', error);
+      }
+
+      // If all authentication methods fail, redirect to login
+      router.push('/login');
     };
 
     checkAuth();
@@ -97,14 +159,9 @@ export default function DashboardPage() {
 
   const loadDashboardData = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: HeadersInit = {};
-      
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
-      
-      const response = await fetch('/api/paper-trading/portfolio', { headers });
+      const response = await fetch('/api/paper-trading/portfolio', { 
+        headers: getWhopAuthHeaders() 
+      });
       if (response.ok) {
         const data = await response.json();
         setDashboardData(data);
@@ -118,14 +175,9 @@ export default function DashboardPage() {
 
   const loadRecentOrders = async (page: number = ordersPage, limit: number = ordersPerPage) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: HeadersInit = {};
-      
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
-      
-      const response = await fetch(`/api/paper-trading/orders?page=${page}&limit=${limit}`, { headers });
+      const response = await fetch(`/api/paper-trading/orders?page=${page}&limit=${limit}`, { 
+        headers: getWhopAuthHeaders() 
+      });
       if (response.ok) {
         const data = await response.json();
         console.log('Dashboard orders loaded:', data.orders);
@@ -235,7 +287,7 @@ export default function DashboardPage() {
               variant="outline"
               className="border-gray-600 text-gray-300 hover:bg-gray-800"
             >
-              View Leaderboard
+              Whop Leaderboard
             </Button>
           </div>
         </div>
@@ -456,7 +508,7 @@ export default function DashboardPage() {
                     className="w-full border-gray-600 text-gray-300 hover:bg-gray-800"
                   >
                     <Trophy className="h-4 w-4 mr-2" />
-                    View Leaderboard
+                    Whop Leaderboard
                   </Button>
 
                   <Button

@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch competitions' }, { status: 500 });
     }
 
-    // Add participant count and leaderboard info
+    // Add participant count info
     const enrichedCompetitions = competitions?.map(comp => ({
       ...comp,
       participant_count: comp.competition_participants?.length || 0,

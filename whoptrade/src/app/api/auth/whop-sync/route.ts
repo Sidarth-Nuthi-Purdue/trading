@@ -16,6 +16,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid Whop user data' }, { status: 400 });
     }
 
+    // Check if service role key is available
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.log('SUPABASE_SERVICE_ROLE_KEY not set, skipping sync for user:', whopUserData.id);
+      return NextResponse.json({ 
+        success: true, 
+        user_id: whopUserData.id,
+        message: 'Sync skipped - service role key not configured'
+      });
+    }
+
     // Extract company information from experience data
     const companyId = whopUserData.experience?.company?.id || null;
     const companyTitle = whopUserData.experience?.company?.title || null;
@@ -27,7 +37,7 @@ export async function POST(request: NextRequest) {
     // Create Supabase admin client (with service role key)
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!, // This needs to be set in environment
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         auth: {
           autoRefreshToken: false,

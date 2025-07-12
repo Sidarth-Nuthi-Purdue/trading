@@ -70,7 +70,7 @@ export async function middleware(request: NextRequest) {
       console.log("Middleware: redirecting authenticated user from auth page to dashboard");
       
       // Add timestamp for cache busting
-      url.pathname = '/dashboard/trading';
+      url.pathname = '/dashboard';
       url.searchParams.set('t', Date.now().toString());
       
       return NextResponse.redirect(url);

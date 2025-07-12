@@ -71,6 +71,12 @@ export default function OptionsChain({ symbol, underlyingPrice, onOptionSelect }
       }
       
       const data = await response.json();
+      
+      // Debug: Log what we received
+      console.log('Options chain data received:', data);
+      console.log('Expiration dates:', data.expirationDates);
+      console.log('Number of expiration dates:', data.expirationDates?.length || 0);
+      
       setOptionsData(data);
       
       // Auto-select first expiration
@@ -95,6 +101,11 @@ export default function OptionsChain({ symbol, underlyingPrice, onOptionSelect }
       }
       
       const data = await response.json();
+      
+      // Debug: Log what we received for specific expiration
+      console.log('Options data for specific expiration:', data);
+      console.log('Expiration dates in response:', data.expirationDates);
+      
       setOptionsData(data);
     } catch (err: any) {
       setError(err.message);
@@ -211,11 +222,27 @@ export default function OptionsChain({ symbol, underlyingPrice, onOptionSelect }
               <SelectValue placeholder="Select expiration" />
             </SelectTrigger>
             <SelectContent className="bg-gray-800 border-gray-700">
-              {optionsData.expirationDates.map((exp) => (
-                <SelectItem key={exp.timestamp} value={exp.timestamp.toString()} className="text-white">
-                  {exp.date} ({exp.daysToExpiry}d)
-                </SelectItem>
-              ))}
+              {optionsData.expirationDates?.map((exp, index) => {
+                console.log(`Rendering expiration option ${index + 1}:`, exp);
+                
+                // Determine the option type based on days to expiry
+                let optionType = '';
+                if (exp.daysToExpiry <= 14) {
+                  optionType = 'Daily';
+                } else if (exp.daysToExpiry <= 60) {
+                  optionType = 'Weekly';
+                } else if (exp.daysToExpiry <= 365) {
+                  optionType = 'Monthly';
+                } else {
+                  optionType = 'LEAPS';
+                }
+                
+                return (
+                  <SelectItem key={exp.timestamp} value={exp.timestamp.toString()} className="text-white">
+                    {exp.date} ({exp.daysToExpiry}d) - {optionType}
+                  </SelectItem>
+                );
+              }) || []}
             </SelectContent>
           </Select>
         </div>

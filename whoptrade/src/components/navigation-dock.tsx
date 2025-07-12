@@ -27,7 +27,7 @@ export function NavigationDock() {
       icon: (
         <IconChartCandle className="h-full w-full" />
       ),
-      href: "/dashboard/trading",
+      href: "/exchange",
     },
     {
       title: "History",

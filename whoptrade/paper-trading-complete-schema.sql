@@ -7,7 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "btree_gin";
 
 -- Drop existing tables if they exist (for clean setup)
 DROP TABLE IF EXISTS competition_participants CASCADE;
-DROP TABLE IF EXISTS competition_leaderboard CASCADE;
+-- competition_leaderboard removed - using Whop's leaderboard features instead
 DROP TABLE IF EXISTS competitions CASCADE;
 DROP TABLE IF EXISTS trade_orders CASCADE;
 DROP TABLE IF EXISTS user_portfolios CASCADE;
@@ -142,25 +142,7 @@ CREATE TABLE competition_participants (
     UNIQUE(competition_id, user_id)
 );
 
--- Competition Leaderboard View (materialized for performance)
-CREATE MATERIALIZED VIEW competition_leaderboard AS
-SELECT 
-    cp.competition_id,
-    cp.user_id,
-    up.username,
-    up.first_name,
-    up.last_name,
-    cp.starting_balance,
-    cp.current_balance,
-    cp.total_pnl,
-    ROUND(((cp.current_balance - cp.starting_balance) / cp.starting_balance * 100), 2) as pnl_percentage,
-    RANK() OVER (PARTITION BY cp.competition_id ORDER BY cp.total_pnl DESC) as rank,
-    cp.status,
-    cp.joined_at,
-    cp.updated_at
-FROM competition_participants cp
-JOIN user_profiles up ON cp.user_id = up.user_id
-WHERE cp.status = 'active';
+-- Competition Leaderboard View removed - using Whop's leaderboard features instead
 
 -- Create indexes for performance
 CREATE INDEX idx_user_profiles_user_id ON user_profiles(user_id);

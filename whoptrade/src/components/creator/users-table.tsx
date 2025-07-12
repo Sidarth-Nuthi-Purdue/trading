@@ -49,11 +49,9 @@ interface User {
   };
 }
 
-interface UsersTableProps {
-  onStatsUpdate: () => void;
-}
+interface UsersTableProps {}
 
-export default function UsersTable({ onStatsUpdate }: UsersTableProps) {
+export default function UsersTable({}: UsersTableProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -108,7 +106,6 @@ export default function UsersTable({ onStatsUpdate }: UsersTableProps) {
         
         // Refresh users data
         await loadUsers();
-        onStatsUpdate();
         
         // Close modal and reset form
         setBalanceModalOpen(false);

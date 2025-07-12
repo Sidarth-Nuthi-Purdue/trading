@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
+import { authenticateUser, createDatabaseClient } from '@/lib/auth-helper';
+import { whopSync } from '@/lib/whop-sync';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,35 +11,19 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-    // Get authorization header
+    // Authenticate user (supports both Supabase and Whop tokens)
     const authHeader = request.headers.get('authorization');
-    
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Missing authorization header' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    
-    // Create Supabase client with the access token
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      }
-    );
-
-    // Get user from token
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { user, error: authError } = await authenticateUser(authHeader);
 
     if (authError || !user) {
-      console.log('Auth error:', authError);
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+      console.log('Authentication failed:', authError);
+      return NextResponse.json({ error: authError || 'Authentication failed' }, { status: 401 });
     }
+
+    console.log('User authenticated for orders:', user.id);
+
+    // Create database client for queries
+    const supabase = createDatabaseClient();
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status'); // pending, filled, cancelled
@@ -123,72 +107,49 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get authorization header
+    // Authenticate user (supports both Supabase and Whop tokens)
     const authHeader = request.headers.get('authorization');
-    
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Missing authorization header' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    
-    // Create Supabase client with the access token
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      }
-    );
-
-    // Get user from token
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { user, error: authError } = await authenticateUser(authHeader);
 
     if (authError || !user) {
-      console.log('Auth error:', authError);
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+      console.log('Authentication failed:', authError);
+      return NextResponse.json({ error: authError || 'Authentication failed' }, { status: 401 });
     }
+
+    console.log('User authenticated for order placement:', user.id);
+
+    // Create database client for queries
+    const supabase = createDatabaseClient();
 
     const body = await request.json();
     const {
       symbol,
       side, // 'buy' or 'sell'
-      order_type, // 'market', 'limit', 'stop_loss', 'take_profit'
+      order_type, // Only 'market' allowed
       quantity,
-      price: clientPrice, // Don't trust client price for security
-      stop_price,
-      // time_in_force = 'day', // Column doesn't exist in database
       asset_type = 'stock'
     } = body;
 
-    // Security: Calculate price server-side only
+    // Validate that only market orders are allowed
+    if (order_type !== 'market') {
+      return NextResponse.json({ 
+        error: 'Only market orders are supported' 
+      }, { status: 400 });
+    }
+
+    // Security: Calculate price server-side only for market orders
     let serverPrice: number;
-    if (order_type === 'limit') {
-      // For limit orders, still use the client price but validate it's reasonable
-      if (!clientPrice || clientPrice <= 0) {
-        return NextResponse.json({ 
-          error: 'Limit orders require a valid price' 
-        }, { status: 400 });
-      }
-      serverPrice = parseFloat(clientPrice.toString());
-    } else {
-      // For market orders, always fetch current market price
-      try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/market-data/quote?symbol=${symbol}`);
-        if (response.ok) {
-          const data = await response.json();
-          serverPrice = data.price;
-        } else {
-          serverPrice = await getMockPrice(symbol);
-        }
-      } catch (error) {
-        console.log('Failed to fetch market price, using mock price');
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/market-data/quote?symbol=${symbol}`);
+      if (response.ok) {
+        const data = await response.json();
+        serverPrice = data.price;
+      } else {
         serverPrice = await getMockPrice(symbol);
       }
+    } catch (error) {
+      console.log('Failed to fetch market price, using mock price');
+      serverPrice = await getMockPrice(symbol);
     }
 
     // Validate required fields
@@ -198,19 +159,12 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Validate order type requirements - now using serverPrice
-    if (order_type === 'limit' && !serverPrice) {
+    // Validate market price was obtained
+    if (!serverPrice || serverPrice <= 0) {
       return NextResponse.json({ 
-        error: 'Limit orders require a valid price' 
-      }, { status: 400 });
+        error: 'Unable to get current market price' 
+      }, { status: 500 });
     }
-
-    // Note: stop_price column doesn't exist in trade_orders table
-    // if (order_type === 'stop_loss' && !stop_price) {
-    //   return NextResponse.json({ 
-    //     error: 'Stop loss orders require a stop_price' 
-    //   }, { status: 400 });
-    // }
 
     // Get user balance to validate order
     const { data: userBalance, error: balanceError } = await supabase
@@ -267,11 +221,9 @@ export async function POST(request: NextRequest) {
         side,
         order_type,
         quantity: parseFloat(quantity),
-        price: serverPrice || null,
+        price: serverPrice,
         filled_quantity: 0, // Initialize as 0 for pending orders
         filled_price: null, // Will be set when order is filled
-        // stop_price: stop_price ? parseFloat(stop_price) : null, // Column doesn't exist
-        // time_in_force, // Column doesn't exist
         status: 'pending'
       })
       .select()
@@ -282,10 +234,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to place order' }, { status: 500 });
     }
 
-    // For market orders, immediately execute them
-    if (order_type === 'market') {
-      await executeMarketOrder(supabase, order.id, serverPrice);
-    }
+    // All orders are now market orders, so execute immediately
+    await executeMarketOrder(supabase, order.id, serverPrice);
 
     return NextResponse.json({ order }, { status: 201 });
   } catch (error) {
@@ -532,6 +482,9 @@ async function updateUserPnL(supabase: any, userId: string, realizedPnL: number)
 
       // Also update unrealized P&L based on current positions
       await updateUnrealizedPnL(supabase, userId);
+      
+      // Sync with Whop leaderboard after P&L update
+      await whopSync.syncUserStatsAfterTrade(userId);
     }
   } catch (error) {
     console.error('Error updating user P&L:', error);

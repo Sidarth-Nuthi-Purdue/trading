@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
@@ -19,10 +19,11 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const resolvedParams = await params;
     const { data: order, error } = await supabase
       .from('trade_orders')
       .select('*')
-      .eq('id', params.orderId)
+      .eq('id', resolvedParams.orderId)
       .eq('user_id', session.user.id)
       .single();
 
@@ -42,7 +43,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
@@ -52,6 +53,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const resolvedParams = await params;
     const body = await request.json();
     const { action, ...updateData } = body;
 
@@ -59,7 +61,7 @@ export async function PUT(
     const { data: currentOrder, error: fetchError } = await supabase
       .from('trade_orders')
       .select('*')
-      .eq('id', params.orderId)
+      .eq('id', resolvedParams.orderId)
       .eq('user_id', session.user.id)
       .single();
 
@@ -91,7 +93,7 @@ export async function PUT(
     const { data: updatedOrder, error: updateError } = await supabase
       .from('trade_orders')
       .update(updatePayload)
-      .eq('id', params.orderId)
+      .eq('id', resolvedParams.orderId)
       .eq('user_id', session.user.id)
       .select()
       .single();

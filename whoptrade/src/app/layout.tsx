@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as SonnerToaster } from 'sonner'
 import { SupabaseProvider } from '@/hooks/use-supabase'
 import { WhopAutoAuth } from '@/components/whop-auto-auth'
+import { WhopThemeProvider } from '@whop-apps/sdk'
 
 // Load Inter font
 const inter = Inter({ subsets: ['latin'] })
@@ -30,16 +31,18 @@ export default function RootLayout({
         <meta name="description" content="Trading platform powered by Whop" />
       </head>
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="dark">
-          <SupabaseProvider>
-            <WhopAutoAuth />
-            <main className="min-h-screen">
-              {children}
-            </main>
-            <Toaster />
-            <SonnerToaster position="top-right" />
-          </SupabaseProvider>
-        </ThemeProvider>
+        <WhopThemeProvider>
+          <ThemeProvider attribute="class" defaultTheme="dark">
+            <SupabaseProvider>
+              <WhopAutoAuth />
+              <main className="min-h-screen">
+                {children}
+              </main>
+              <Toaster />
+              <SonnerToaster position="top-right" />
+            </SupabaseProvider>
+          </ThemeProvider>
+        </WhopThemeProvider>
       </body>
     </html>
   )

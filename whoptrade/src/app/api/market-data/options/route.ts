@@ -3,14 +3,153 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 /**
+ * Generate extended mock options data for testing
+ */
+function generateExtendedMockOptionsData(symbol: string, underlyingPrice: number) {
+  console.log(`Generating extended mock data for ${symbol} at price ${underlyingPrice}`);
+  const option_contracts = [];
+  
+  // Generate expiration dates from 1 week to 2 years out
+  const expirationDates = [];
+  const today = new Date();
+  console.log(`Today's date: ${today.toISOString().split('T')[0]}`);
+  
+  // Daily options for the next 14 days (excluding weekends)
+  for (let day = 1; day <= 14; day++) {
+    const expDate = new Date(today);
+    expDate.setDate(today.getDate() + day);
+    // Skip weekends (Saturday = 6, Sunday = 0)
+    if (expDate.getDay() !== 0 && expDate.getDay() !== 6) {
+      expirationDates.push(expDate.toISOString().split('T')[0]);
+    }
+  }
+  
+  // Weekly options for the next 8 weeks
+  for (let week = 1; week <= 8; week++) {
+    const expDate = new Date(today);
+    expDate.setDate(today.getDate() + (week * 7));
+    // Options typically expire on Fridays (day 5)
+    const dayOfWeek = expDate.getDay();
+    const daysToFriday = dayOfWeek === 5 ? 0 : (5 - dayOfWeek + 7) % 7;
+    expDate.setDate(expDate.getDate() + daysToFriday);
+    expirationDates.push(expDate.toISOString().split('T')[0]);
+  }
+  
+  // Monthly options for the next 24 months
+  for (let month = 1; month <= 24; month++) {
+    const expDate = new Date(today);
+    expDate.setMonth(today.getMonth() + month);
+    // Third Friday of the month
+    expDate.setDate(1);
+    // Find first Friday
+    const firstFriday = expDate.getDay() === 5 ? 1 : (5 - expDate.getDay() + 7) % 7 + 1;
+    // Third Friday is first Friday + 14 days
+    expDate.setDate(firstFriday + 14);
+    expirationDates.push(expDate.toISOString().split('T')[0]);
+  }
+  
+  // Remove duplicates and sort
+  const uniqueExpirations = [...new Set(expirationDates)].sort();
+  console.log(`Generated ${uniqueExpirations.length} unique expiration dates:`, uniqueExpirations.slice(0, 15));
+  
+  // Log breakdown by type
+  const dailyOptions = uniqueExpirations.filter(date => {
+    const expDate = new Date(date);
+    const daysDiff = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return daysDiff <= 14 && daysDiff > 0;
+  });
+  
+  console.log(`Daily options (next 14 days): ${dailyOptions.length} dates`);
+  console.log(`Weekly + Monthly options: ${uniqueExpirations.length - dailyOptions.length} dates`);
+  
+  // Generate strike prices around current price
+  const strikes = [];
+  const basePrice = Math.floor(underlyingPrice);
+  for (let i = -20; i <= 20; i++) {
+    const strike = basePrice + (i * 5); // $5 intervals
+    if (strike > 0) strikes.push(strike);
+  }
+  
+  // Generate contracts for each expiration/strike combination
+  uniqueExpirations.forEach(expDate => {
+    strikes.forEach(strike => {
+      // Create call contract with realistic pricing
+      const callIntrinsicValue = Math.max(0, underlyingPrice - strike);
+      const callTimeValue = Math.max(0.05, 2 - Math.abs(underlyingPrice - strike) / 10);
+      const callPrice = callIntrinsicValue + callTimeValue;
+      const callBid = Math.max(0.01, callPrice - 0.05);
+      const callAsk = callPrice + 0.05;
+      
+      const callSymbol = `${symbol}${expDate.replace(/-/g, '').substring(2)}C${(strike * 1000).toString().padStart(8, '0')}`;
+      const callContract = {
+        symbol: callSymbol,
+        underlying_symbol: symbol,
+        expiration_date: expDate,
+        strike_price: strike.toString(),
+        type: 'call',
+        style: 'american',
+        status: 'active',
+        tradable: true,
+        close_price: callPrice.toFixed(2),
+        close_price_date: expDate,
+        open_interest: '1000',
+        bid: callBid.toFixed(2),
+        ask: callAsk.toFixed(2),
+        volume: Math.floor(Math.random() * 500) + 50
+      };
+      
+      // Create put contract with realistic pricing
+      const putIntrinsicValue = Math.max(0, strike - underlyingPrice);
+      const putTimeValue = Math.max(0.05, 2 - Math.abs(underlyingPrice - strike) / 10);
+      const putPrice = putIntrinsicValue + putTimeValue;
+      const putBid = Math.max(0.01, putPrice - 0.05);
+      const putAsk = putPrice + 0.05;
+      
+      const putSymbol = `${symbol}${expDate.replace(/-/g, '').substring(2)}P${(strike * 1000).toString().padStart(8, '0')}`;
+      const putContract = {
+        symbol: putSymbol,
+        underlying_symbol: symbol,
+        expiration_date: expDate,
+        strike_price: strike.toString(),
+        type: 'put',
+        style: 'american',
+        status: 'active',
+        tradable: true,
+        close_price: putPrice.toFixed(2),
+        close_price_date: expDate,
+        open_interest: '1000',
+        bid: putBid.toFixed(2),
+        ask: putAsk.toFixed(2),
+        volume: Math.floor(Math.random() * 500) + 50
+      };
+      
+      option_contracts.push(callContract, putContract);
+    });
+  });
+  
+  console.log(`Generated ${option_contracts.length} total option contracts`);
+  return { option_contracts };
+}
+
+/**
  * Process Alpaca options data into our format
  */
-function processAlpacaOptionsData(optionsContracts: any[], optionsBars: any, optionsQuotes: any, underlyingPrice: number, symbol: string) {
+function processAlpacaOptionsData(optionsContracts: any[], optionsBars: any, optionsQuotes: any, underlyingPrice: number, symbol: string, requestedDate?: string) {
   const expirationMap = new Map();
   const strikes = new Set<number>();
   
   optionsContracts.forEach((contract: any) => {
     const expDate = contract.expiration_date;
+    
+    // Skip contracts that are expired or too far in the future (more than 2 years)
+    const expDateObj = new Date(expDate);
+    const now = new Date();
+    const daysDiff = Math.ceil((expDateObj.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (daysDiff < 0 || daysDiff > 730) { // Skip expired contracts or contracts more than 2 years out
+      return;
+    }
+    
     if (!expirationMap.has(expDate)) {
       expirationMap.set(expDate, { calls: [], puts: [] });
     }
@@ -18,9 +157,9 @@ function processAlpacaOptionsData(optionsContracts: any[], optionsBars: any, opt
     // Convert strike price to number
     const strikePrice = parseFloat(contract.strike_price);
     
-    // Filter out strikes that are too far out of the money
+    // Filter out strikes that are too far out of the money (increased range)
     const priceDiff = Math.abs(strikePrice - underlyingPrice);
-    const maxDiff = underlyingPrice * 0.5; // Only show strikes within 50% of current price
+    const maxDiff = underlyingPrice * 0.75; // Show strikes within 75% of current price
     if (priceDiff > maxDiff) {
       return; // Skip this contract
     }
@@ -36,8 +175,8 @@ function processAlpacaOptionsData(optionsContracts: any[], optionsBars: any, opt
     
     // Calculate estimated bid/ask if not available
     const lastPrice = latestBar?.c || parseFloat(contract.close_price) || 0;
-    const bidPrice = quote?.bp || (lastPrice > 0 ? Math.max(0.01, lastPrice - 0.05) : 0);
-    const askPrice = quote?.ap || (lastPrice > 0 ? lastPrice + 0.05 : 0);
+    const bidPrice = quote?.bp || parseFloat(contract.bid) || (lastPrice > 0 ? Math.max(0.01, lastPrice - 0.05) : 0);
+    const askPrice = quote?.ap || parseFloat(contract.ask) || (lastPrice > 0 ? lastPrice + 0.05 : 0);
     
     const optionData = {
       contractSymbol: contract.symbol,
@@ -45,7 +184,7 @@ function processAlpacaOptionsData(optionsContracts: any[], optionsBars: any, opt
       lastPrice: lastPrice,
       bid: bidPrice,
       ask: askPrice,
-      volume: latestBar?.v || 0,
+      volume: latestBar?.v || contract.volume || 0,
       openInterest: parseInt(contract.open_interest) || 0,
       impliedVolatility: 0, // Would need separate API call
       inTheMoney: contract.type === 'call' 
@@ -63,9 +202,9 @@ function processAlpacaOptionsData(optionsContracts: any[], optionsBars: any, opt
     }
   });
 
-  // Get the nearest expiration date
+  // Get the expiration date to return options for
   const sortedExpirations = Array.from(expirationMap.keys()).sort();
-  const nearestExpiration = sortedExpirations[0];
+  const targetExpiration = requestedDate || sortedExpirations[0];
   
   return {
     symbol,
@@ -79,7 +218,7 @@ function processAlpacaOptionsData(optionsContracts: any[], optionsBars: any, opt
       };
     }),
     strikes: Array.from(strikes).sort((a, b) => a - b),
-    options: nearestExpiration ? expirationMap.get(nearestExpiration) : { calls: [], puts: [] }
+    options: targetExpiration ? expirationMap.get(targetExpiration) : { calls: [], puts: [] }
   };
 }
 
@@ -290,24 +429,73 @@ export async function GET(request: NextRequest) {
 
     // Get options chain from Alpaca
     console.log(`Fetching options chain for ${symbol}...`);
-    const optionsUrl = `https://paper-api.alpaca.markets/v2/options/contracts?underlying_symbols=${symbol}&limit=1000`;
-
-    const optionsResponse = await fetch(optionsUrl, {
-      headers: {
-        'APCA-API-KEY-ID': apiKey,
-        'APCA-API-SECRET-KEY': apiSecret,
-        'Content-Type': 'application/json'
-      },
-      cache: 'no-store'
-    });
-
-    if (!optionsResponse.ok) {
-      const errorText = await optionsResponse.text();
-      console.error(`Alpaca options API error: ${optionsResponse.status} - ${errorText}`);
-      throw new Error(`Alpaca options API error: ${optionsResponse.status} ${optionsResponse.statusText}`);
+    // Get options chain from Alpaca - try different endpoints
+    let optionsData = null;
+    let apiError = null;
+    
+    // Try the paper API first
+    try {
+      const paperUrl = `https://paper-api.alpaca.markets/v2/options/contracts?underlying_symbols=${symbol}&limit=5000`;
+      console.log(`Trying paper API: ${paperUrl}`);
+      
+      const paperResponse = await fetch(paperUrl, {
+        headers: {
+          'APCA-API-KEY-ID': apiKey,
+          'APCA-API-SECRET-KEY': apiSecret,
+          'Content-Type': 'application/json'
+        },
+        cache: 'no-store'
+      });
+      
+      if (paperResponse.ok) {
+        optionsData = await paperResponse.json();
+        console.log(`Paper API success: ${optionsData.option_contracts?.length || 0} contracts`);
+      } else {
+        console.log(`Paper API failed: ${paperResponse.status}`);
+      }
+    } catch (error) {
+      console.log(`Paper API error:`, error);
     }
-
-    const optionsData = await optionsResponse.json();
+    
+    // If paper API didn't work, try data API
+    if (!optionsData?.option_contracts?.length) {
+      try {
+        const dataUrl = `https://data.alpaca.markets/v1beta1/options/contracts?underlying_symbols=${symbol}&limit=5000`;
+        console.log(`Trying data API: ${dataUrl}`);
+        
+        const dataResponse = await fetch(dataUrl, {
+          headers: {
+            'APCA-API-KEY-ID': apiKey,
+            'APCA-API-SECRET-KEY': apiSecret,
+            'Content-Type': 'application/json'
+          },
+          cache: 'no-store'
+        });
+        
+        if (dataResponse.ok) {
+          optionsData = await dataResponse.json();
+          console.log(`Data API success: ${optionsData.option_contracts?.length || 0} contracts`);
+        } else {
+          console.log(`Data API failed: ${dataResponse.status}`);
+          apiError = `Data API error: ${dataResponse.status}`;
+        }
+      } catch (error) {
+        console.log(`Data API error:`, error);
+        apiError = `Data API error: ${error.message}`;
+      }
+    }
+    
+    // Force use of extended mock data for testing (remove this later)
+    console.log(`Using extended mock data for testing - comment out this line to use real Alpaca data`);
+    optionsData = generateExtendedMockOptionsData(symbol, underlyingPrice);
+    
+    // Original fallback logic (commented out for testing)
+    // if (!optionsData?.option_contracts?.length) {
+    //   console.log(`No options data from Alpaca, generating extended mock data for testing...`);
+    //   optionsData = generateExtendedMockOptionsData(symbol, underlyingPrice);
+    // }
+    
+    // Options data is already fetched above
     
     console.log(`Got ${optionsData.option_contracts?.length || 0} options contracts from Alpaca`);
     
@@ -315,8 +503,24 @@ export async function GET(request: NextRequest) {
       throw new Error(`No options data available for ${symbol}`);
     }
 
-    // Get options quotes for live bid/ask data
-    const contractSymbols = optionsData.option_contracts.slice(0, 50).map((contract: any) => contract.symbol);
+    // Debug: Log expiration dates found
+    const uniqueExpirationDates = [...new Set(optionsData.option_contracts.map((contract: any) => contract.expiration_date))];
+    console.log(`Found ${uniqueExpirationDates.length} unique expiration dates:`, uniqueExpirationDates.slice(0, 10));
+    
+    // Debug: Check date filtering
+    const now = new Date();
+    const futureContracts = optionsData.option_contracts.filter((contract: any) => {
+      const expDate = new Date(contract.expiration_date);
+      const daysDiff = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      return daysDiff >= 0 && daysDiff <= 730;
+    });
+    console.log(`After date filtering: ${futureContracts.length} contracts remaining`);
+    
+    const filteredExpirations = [...new Set(futureContracts.map((contract: any) => contract.expiration_date))];
+    console.log(`Expiration dates after filtering:`, filteredExpirations.slice(0, 10));
+
+    // Get options quotes for live bid/ask data (increased limit)
+    const contractSymbols = optionsData.option_contracts.slice(0, 200).map((contract: any) => contract.symbol);
     console.log(`Getting quote data for ${contractSymbols.length} contracts...`);
 
     let quotesData = { quotes: {} };
@@ -372,7 +576,8 @@ export async function GET(request: NextRequest) {
       barsData.bars || {},
       quotesData.quotes || {},
       underlyingPrice,
-      symbol
+      symbol,
+      date
     );
     
     console.log(`Successfully processed options chain for ${symbol}`);

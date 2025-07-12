@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { authenticateUser, createDatabaseClient } from '@/lib/auth-helper';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,35 +8,19 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-    // Get authorization header
+    // Authenticate user (supports both Supabase and Whop tokens)
     const authHeader = request.headers.get('authorization');
-    
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Missing authorization header' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    
-    // Create Supabase client with the access token
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      }
-    );
-
-    // Get user from token
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { user, error: authError } = await authenticateUser(authHeader);
 
     if (authError || !user) {
-      console.log('Auth error:', authError);
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+      console.log('Authentication failed:', authError);
+      return NextResponse.json({ error: authError || 'Authentication failed' }, { status: 401 });
     }
+
+    console.log('User authenticated for performance data:', user.id);
+
+    // Create database client for queries
+    const supabase = createDatabaseClient();
 
     const { searchParams } = new URL(request.url);
     const period = searchParams.get('period') || '30d'; // 1d, 7d, 30d, 90d, 1y, all

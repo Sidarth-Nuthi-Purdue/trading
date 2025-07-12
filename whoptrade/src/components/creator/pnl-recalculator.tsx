@@ -10,7 +10,7 @@ interface PnLRecalculatorProps {
   onComplete?: () => void;
 }
 
-export default function PnLRecalculator({ onComplete }: PnLRecalculatorProps) {
+export default function PnLRecalculator({ onComplete }: PnLRecalculatorProps = {}) {
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);

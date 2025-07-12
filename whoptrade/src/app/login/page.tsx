@@ -72,10 +72,10 @@ export default function LoginPage() {
     // Check if we have Whop authentication
     setHasWhopAuth(hasWhopAuthToken());
     
-    // If we're in a Whop iframe and have Whop auth, redirect to dashboard
-    if (isInWhopIframe() && hasWhopAuthToken()) {
-      console.log("Detected Whop iframe authentication, redirecting to dashboard");
-      router.push('/dashboard/trading');
+    // If we're in a Whop iframe, redirect to Whop dashboard
+    if (isInWhopIframe()) {
+      console.log("Detected Whop iframe, redirecting to Whop dashboard");
+      router.push('/dashboard-whop');
       return;
     }
     
@@ -181,14 +181,14 @@ export default function LoginPage() {
           <div className="bg-blue-900/50 text-blue-300 p-4 rounded-lg text-center">
             <p className="font-medium">Whop Iframe Detected</p>
             <p className="text-sm mt-1">
-              You're viewing this app in a Whop iframe. Login using Whop authentication.
+              You're viewing this app in a Whop iframe. Authentication will be handled automatically.
             </p>
-            <button
-              onClick={() => window.location.href = '/api/oauth/init?next=/dashboard/trading'}
-              className="mt-3 px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200"
+            <Link
+              href="/dashboard-whop"
+              className="inline-block mt-3 px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200"
             >
-              Login with Whop
-            </button>
+              Access Dashboard
+            </Link>
           </div>
         )}
 
@@ -258,16 +258,27 @@ export default function LoginPage() {
               </div>
             </div>
             
-            <button
-              onClick={() => window.location.href = '/api/oauth/init?next=/dashboard/trading'}
-              className="w-full px-4 py-2 bg-purple-600 text-white font-medium rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition duration-200 flex items-center justify-center"
-            >
-              <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
-                <path d="M11 7h2v6h-2zm0 8h2v2h-2z"/>
-              </svg>
-              Login with Whop
-            </button>
+            <div className="space-y-2">
+              <Link
+                href="/dashboard-whop"
+                className="block w-full px-4 py-2 bg-purple-600 text-white font-medium rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition duration-200 text-center"
+              >
+                <div className="flex items-center justify-center">
+                  <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                    <path d="M11 7h2v6h-2zm0 8h2v2h-2z"/>
+                  </svg>
+                  Access Whop Dashboard
+                </div>
+              </Link>
+              
+              <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3 text-center">
+                <p className="text-blue-300 text-sm">
+                  <strong>Note:</strong> Whop authentication works automatically when this app is accessed through Whop's platform. 
+                  The dashboard will verify your Whop credentials automatically.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

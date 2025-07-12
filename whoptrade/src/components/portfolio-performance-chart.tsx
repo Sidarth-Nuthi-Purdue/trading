@@ -68,10 +68,9 @@ export default function PortfolioPerformanceChart({ userId }: PortfolioPerforman
         granularity
       });
 
+      const { getWhopAuthHeaders } = await import('@/lib/whop-supabase-bridge');
       const response = await fetch(`/api/paper-trading/performance?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${await getAccessToken()}`
-        }
+        headers: getWhopAuthHeaders()
       });
 
       if (!response.ok) {

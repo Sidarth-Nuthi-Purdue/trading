@@ -63,49 +63,105 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/login?error=missing_state", request.url));
   }
 
-  // Get cookies
+  // Get cookies using the state-based approach
   const cookies = request.headers.get("Cookie") || "";
-  const cookieState = getCookieValue(cookies, "oauth-state");
-  const redirectUrl = getCookieValue(cookies, "oauth-redirect");
+  const stateCookieName = `oauth-state.${state}`;
+  const stateCookie = cookies
+    .split(";")
+    .find(cookie => cookie.trim().startsWith(`${stateCookieName}=`));
 
-  if (!cookieState || cookieState !== state) {
+  if (!stateCookie) {
+    console.error('No state cookie found for state:', state);
     return NextResponse.redirect(new URL("/login?error=invalid_state", request.url));
   }
 
+  // Extract the redirect URL from the cookie value
+  const redirectUrl = decodeURIComponent(stateCookie.split("=")[1]);
+
   try {
-    // Exchange the code for a token
-    const response = await fetch("https://api.whop.com/v5/oauth/token", {
+    // Exchange the code for a token using Whop's API
+    console.log('Attempting token exchange with:', {
+      client_id: process.env.NEXT_PUBLIC_WHOP_APP_ID,
+      redirect_uri: process.env.NEXT_PUBLIC_WHOP_CALLBACK_URL,
+      code: code ? code.substring(0, 10) + '...' : 'missing'
+    });
+
+    // Try different OAuth token exchange approaches for Whop
+    let response;
+    
+    // First try: Standard OAuth with form-encoded data
+    response = await fetch("https://api.whop.com/v5/oauth/token", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: JSON.stringify({
-        client_id: process.env.NEXT_PUBLIC_WHOP_CLIENT_ID,
-        client_secret: process.env.WHOP_CLIENT_SECRET,
-        code,
+      body: new URLSearchParams({
+        client_id: process.env.NEXT_PUBLIC_WHOP_APP_ID!,
+        client_secret: process.env.WHOP_API_KEY!,
+        code: code!,
         grant_type: "authorization_code",
-        redirect_uri: process.env.NEXT_PUBLIC_WHOP_CALLBACK_URL,
-      }),
+        redirect_uri: process.env.NEXT_PUBLIC_WHOP_CALLBACK_URL!,
+      }).toString(),
     });
+
+    // If that fails, try with Bearer auth
+    if (!response.ok) {
+      console.log('First attempt failed, trying with Bearer auth...');
+      response = await fetch("https://api.whop.com/v5/oauth/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.WHOP_API_KEY}`,
+        },
+        body: JSON.stringify({
+          client_id: process.env.NEXT_PUBLIC_WHOP_APP_ID,
+          code: code,
+          redirect_uri: process.env.NEXT_PUBLIC_WHOP_CALLBACK_URL,
+        }),
+      });
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.error("Whop OAuth token error:", errorData);
+      
+      // If OAuth fails with invalid_client, redirect to fallback auth
+      if (errorData.error === 'invalid_client') {
+        console.log('OAuth not enabled for this app, redirecting to fallback auth');
+        return NextResponse.redirect(new URL("/auth/whop-fallback?error=oauth_not_enabled", request.url));
+      }
+      
       return NextResponse.redirect(new URL("/login?error=token_exchange_failed", request.url));
     }
 
-    const { access_token } = await response.json();
-    const nextUrl = redirectUrl ? decodeURIComponent(redirectUrl) : "/dashboard";
+    const responseData = await response.json();
+    const access_token = responseData.access_token || responseData.tokens?.access_token;
+    
+    if (!access_token) {
+      console.error("No access token in response:", responseData);
+      return NextResponse.redirect(new URL("/login?error=no_access_token", request.url));
+    }
+    
+    const nextUrl = redirectUrl || "/dashboard";
 
     // Create response with CORS headers if needed
     const redirectResponse = NextResponse.redirect(new URL(nextUrl, request.url));
     
-    // Set cookie with more permissive settings for local development
+    // Set cookie with the access token
     redirectResponse.cookies.set("whop_access_token", access_token, {
       httpOnly: true,
-      secure: false, // Set to false for local development
-      sameSite: "lax", // Changed from none to lax for local development
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
       maxAge: 3600,
+      path: "/"
+    });
+    
+    // Clear the state cookie since it's no longer needed
+    redirectResponse.cookies.set(stateCookieName, "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
       path: "/"
     });
     
@@ -123,11 +179,6 @@ export async function GET(request: Request) {
   }
 }
 
-// Helper function to get cookie value
-function getCookieValue(cookies: string, name: string): string | null {
-  const match = cookies.match(new RegExp(`(^| )${name}=([^;]+)`));
-  return match ? match[2] : null;
-}
 
 // Handle OPTIONS requests for CORS preflight
 export async function OPTIONS(request: Request) {

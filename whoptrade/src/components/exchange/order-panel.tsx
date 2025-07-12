@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { createBrowserClient } from '@supabase/ssr';
+import { getWhopAuthHeaders } from '@/lib/whop-supabase-bridge';
 
 interface OrderPanelProps {
   symbol: string;
@@ -27,10 +28,7 @@ const supabase = createBrowserClient(
 
 export default function OrderPanel({ symbol, portfolio, onOrderPlaced, currentPrice: propCurrentPrice, selectedOption, assetType = 'stock' }: OrderPanelProps) {
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
-  const [orderType, setOrderType] = useState<'market' | 'limit' | 'stop_loss' | 'take_profit'>('market');
   const [quantity, setQuantity] = useState('');
-  const [price, setPrice] = useState('');
-  const [stopPrice, setStopPrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -67,12 +65,6 @@ export default function OrderPanel({ symbol, portfolio, onOrderPlaced, currentPr
     }
   }, [symbol, propCurrentPrice, selectedOption, assetType]);
 
-  // Set price to current market price when switching to limit orders
-  useEffect(() => {
-    if (orderType === 'limit' && !price && currentPrice > 0) {
-      setPrice(currentPrice.toString());
-    }
-  }, [orderType, currentPrice, price]);
 
   const availableBalance = portfolio?.balance?.available_balance || 0;
   const currentPosition = portfolio?.positions?.find((p: any) => p.symbol === symbol);
@@ -81,14 +73,12 @@ export default function OrderPanel({ symbol, portfolio, onOrderPlaced, currentPr
   // Estimated cost calculation for display only - backend will use actual market prices
   const estimatedCost = () => {
     const qty = parseFloat(quantity) || 0;
-    const orderPrice = orderType === 'market' ? currentPrice : parseFloat(price) || currentPrice;
-    return qty * orderPrice;
+    return qty * currentPrice;
   };
 
   const maxQuantity = () => {
     if (side === 'buy') {
-      const orderPrice = orderType === 'market' ? currentPrice : parseFloat(price) || currentPrice;
-      return Math.floor(availableBalance / orderPrice);
+      return Math.floor(availableBalance / currentPrice);
     } else {
       return availableShares;
     }
@@ -106,13 +96,6 @@ export default function OrderPanel({ symbol, portfolio, onOrderPlaced, currentPr
         throw new Error('Please enter a valid quantity');
       }
 
-      if (orderType === 'limit' && (!price || parseFloat(price) <= 0)) {
-        throw new Error('Please enter a valid price for limit orders');
-      }
-
-      if (orderType === 'stop_loss' && (!stopPrice || parseFloat(stopPrice) <= 0)) {
-        throw new Error('Please enter a valid stop price');
-      }
 
       if (side === 'buy' && estimatedCost() > availableBalance) {
         throw new Error('Insufficient balance for this order');
@@ -126,11 +109,8 @@ export default function OrderPanel({ symbol, portfolio, onOrderPlaced, currentPr
       const orderData = {
         symbol: assetType === 'option' ? selectedOption?.contractSymbol : symbol,
         side,
-        order_type: orderType,
+        order_type: 'market',
         quantity: parseFloat(quantity),
-        // Security: Only send price for limit orders, backend calculates market prices
-        price: orderType === 'limit' ? parseFloat(price) : null,
-        stop_price: orderType === 'stop_loss' ? parseFloat(stopPrice) : null,
         asset_type: assetType,
         // Additional fields for options
         ...(assetType === 'option' && selectedOption && {
@@ -139,22 +119,11 @@ export default function OrderPanel({ symbol, portfolio, onOrderPlaced, currentPr
           expiration_date: selectedOption.contractSymbol ? parseExpirationFromContract(selectedOption.contractSymbol) : null,
           option_type: selectedOption.contractSymbol ? parseOptionType(selectedOption.contractSymbol) : null
         })
-        // time_in_force removed - not supported by database schema
       };
-
-      // Get authentication headers
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json'
-      };
-      
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
 
       const response = await fetch('/api/paper-trading/orders', {
         method: 'POST',
-        headers,
+        headers: getWhopAuthHeaders(),
         body: JSON.stringify(orderData)
       });
 
@@ -168,8 +137,6 @@ export default function OrderPanel({ symbol, portfolio, onOrderPlaced, currentPr
       
       // Reset form
       setQuantity('');
-      setPrice('');
-      setStopPrice('');
       
       // Notify parent component
       onOrderPlaced();
@@ -269,17 +236,9 @@ export default function OrderPanel({ symbol, portfolio, onOrderPlaced, currentPr
               {/* Order Type */}
               <div className="space-y-2">
                 <Label className="text-gray-300">Order Type</Label>
-                <Select value={orderType} onValueChange={(value) => setOrderType(value as any)}>
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
-                    <SelectItem value="market" className="text-white">Market</SelectItem>
-                    <SelectItem value="limit" className="text-white">Limit</SelectItem>
-                    <SelectItem value="stop_loss" className="text-white">Stop Loss</SelectItem>
-                    <SelectItem value="take_profit" className="text-white">Take Profit</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-300 text-sm">
+                  Market Order (executes immediately at current market price)
+                </div>
               </div>
 
               {/* Quantity */}
@@ -305,37 +264,6 @@ export default function OrderPanel({ symbol, portfolio, onOrderPlaced, currentPr
                 />
               </div>
 
-              {/* Price (for limit orders) */}
-              {orderType === 'limit' && (
-                <div className="space-y-2">
-                  <Label className="text-gray-300">Limit Price</Label>
-                  <Input
-                    type="number"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    placeholder={currentPrice.toString()}
-                    min="0"
-                    step="0.01"
-                    className="bg-gray-800 border-gray-700 text-white"
-                  />
-                </div>
-              )}
-
-              {/* Stop Price (for stop loss orders) */}
-              {orderType === 'stop_loss' && (
-                <div className="space-y-2">
-                  <Label className="text-gray-300">Stop Price</Label>
-                  <Input
-                    type="number"
-                    value={stopPrice}
-                    onChange={(e) => setStopPrice(e.target.value)}
-                    placeholder="0.00"
-                    min="0"
-                    step="0.01"
-                    className="bg-gray-800 border-gray-700 text-white"
-                  />
-                </div>
-              )}
 
               {/* Order Summary */}
               {quantity && (

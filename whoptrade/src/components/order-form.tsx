@@ -25,11 +25,8 @@ export default function OrderForm({ symbol, currentPrice, onOrderPlaced }: Order
   const { user, isLoading: authLoading } = useSupabase();
   
   // State for form inputs
-  const [orderType, setOrderType] = useState<'market' | 'limit'>('market');
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [quantity, setQuantity] = useState<string>('1');
-  const [limitPrice, setLimitPrice] = useState<string>('');
-  const [timeInForce, setTimeInForce] = useState<'day' | 'gtc'>('day');
   
   // State for UI
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
@@ -46,11 +43,9 @@ export default function OrderForm({ symbol, currentPrice, onOrderPlaced }: Order
     };
   });
   
-  // Update limit price when current price changes
+  // Update latest price when current price changes
   useEffect(() => {
-    if (currentPrice && !limitPrice) {
-      setLimitPrice(currentPrice.toFixed(2));
-    } else if (currentPrice) {
+    if (currentPrice) {
       setLatestPrice(currentPrice);
     }
   }, [currentPrice]);
@@ -74,16 +69,10 @@ export default function OrderForm({ symbol, currentPrice, onOrderPlaced }: Order
       if (data.quote) {
         const price = side === 'buy' ? parseFloat(data.quote.ap) : parseFloat(data.quote.bp);
         setLatestPrice(price);
-        if (!limitPrice || parseFloat(limitPrice) === 0) {
-          setLimitPrice(price.toFixed(2));
-        }
         toast.success('Latest price updated');
       } else if (data.bp && data.ap) { // Fallback for direct quote response
         const price = side === 'buy' ? parseFloat(data.ap) : parseFloat(data.bp);
         setLatestPrice(price);
-        if (!limitPrice || parseFloat(limitPrice) === 0) {
-          setLimitPrice(price.toFixed(2));
-        }
         toast.success('Latest price updated');
       }
 
@@ -161,13 +150,6 @@ export default function OrderForm({ symbol, currentPrice, onOrderPlaced }: Order
       return;
     }
     
-    if (orderType === 'limit') {
-      const priceValue = parseFloat(limitPrice);
-      if (isNaN(priceValue) || priceValue <= 0) {
-        setOrderError('Limit price must be a positive number');
-        return;
-      }
-    }
     
     // Show warning if market is closed
     if (!marketStatus.isOpen) {
@@ -184,9 +166,7 @@ export default function OrderForm({ symbol, currentPrice, onOrderPlaced }: Order
       symbol,
       quantity: qtyValue,
       side,
-      type: orderType,
-      limitPrice: orderType === 'limit' ? parseFloat(limitPrice) : undefined,
-      timeInForce,
+      order_type: 'market',
       bypassMarketHours: true // Allow paper trading outside market hours
     };
     
@@ -208,13 +188,10 @@ export default function OrderForm({ symbol, currentPrice, onOrderPlaced }: Order
       }
       
       toast.success(`${side.toUpperCase()} order placed successfully`, {
-        description: `${quantity} shares of ${symbol} at ${orderType === 'market' ? 'market price' : '$' + limitPrice}`
+        description: `${quantity} shares of ${symbol} at market price`
       });
       
       setQuantity('1');
-      if (orderType === 'limit' && latestPrice) {
-        setLimitPrice(latestPrice.toFixed(2));
-      }
       
       if (onOrderPlaced) {
         onOrderPlaced();
@@ -237,9 +214,7 @@ export default function OrderForm({ symbol, currentPrice, onOrderPlaced }: Order
     const qty = parseFloat(quantity) || 0;
     let price = 0;
     
-    if (orderType === 'limit') {
-      price = parseFloat(limitPrice) || 0;
-    } else if (latestPrice) {
+    if (latestPrice) {
       price = latestPrice;
     } else if (currentPrice) {
       price = currentPrice;
@@ -277,58 +252,23 @@ export default function OrderForm({ symbol, currentPrice, onOrderPlaced }: Order
           </TabsList>
           
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="quantity">Quantity</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  min="0.01"
-                  step="1"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="order-type">Order Type</Label>
-                <Select value={orderType} onValueChange={(value) => setOrderType(value as 'market' | 'limit')}>
-                  <SelectTrigger id="order-type">
-                    <SelectValue placeholder="Order Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="market">Market</SelectItem>
-                    <SelectItem value="limit">Limit</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="quantity">Quantity</Label>
+              <Input
+                id="quantity"
+                type="number"
+                min="0.01"
+                step="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+              />
             </div>
             
-            {orderType === 'limit' && (
-              <div className="space-y-2">
-                <Label htmlFor="limit-price">Limit Price</Label>
-                <Input
-                  id="limit-price"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={limitPrice}
-                  onChange={(e) => setLimitPrice(e.target.value)}
-                />
-              </div>
-            )}
-            
             <div className="space-y-2">
-              <Label htmlFor="time-in-force">Time in Force</Label>
-              <Select value={timeInForce} onValueChange={(value) => setTimeInForce(value as 'day' | 'gtc')}>
-                <SelectTrigger id="time-in-force">
-                  <SelectValue placeholder="Time in Force" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="day">Day</SelectItem>
-                  <SelectItem value="gtc">Good 'til Canceled</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Order Type</Label>
+              <div className="px-3 py-2 bg-muted rounded-md text-sm">
+                Market Order (executes immediately at current market price)
+              </div>
             </div>
           </div>
         </Tabs>

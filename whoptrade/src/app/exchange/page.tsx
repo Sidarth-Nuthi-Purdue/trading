@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { User } from '@supabase/supabase-js';
+import { getWhopAuthHeaders, isWhopAuthenticated } from '@/lib/whop-supabase-bridge';
 import AssetList from '@/components/exchange/asset-list';
 import ChartView from '@/components/chart-view';
 import OrderPanel from '@/components/exchange/order-panel';
@@ -64,50 +65,83 @@ export default function ExchangePage() {
   // Check authentication and load initial data
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      // For testing, set up a mock Whop user
+      const testWhopUserId = 'lpRuDNk8Npniv';
+      if (!localStorage.getItem('whop_user_id')) {
+        localStorage.setItem('whop_user_id', testWhopUserId);
+        console.log('Set test Whop user ID:', testWhopUserId);
+      }
       
-      if (!session) {
-        // Check if we have Whop authentication
-        try {
-          const whopResponse = await fetch('/api/user/me', {
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache',
-            },
-          });
-          
-          if (whopResponse.ok) {
-            const whopUser = await whopResponse.json();
-            console.log('Exchange: Found Whop user, Supabase sync should be in progress');
-            
-            // Wait a bit for sync to complete, then try again
-            setTimeout(async () => {
-              const { data: { session: retrySession } } = await supabase.auth.getSession();
-              if (retrySession) {
-                setUser(retrySession.user as User);
-                await loadPortfolio();
-                await loadOrders();
-              }
-              setLoading(false);
-            }, 2000);
-            return;
-          }
-        } catch (error) {
-          console.error('Error checking Whop auth:', error);
+      // First check if we have a Whop session stored
+      if (isWhopAuthenticated()) {
+        console.log('Using existing Whop authentication');
+        const authData = JSON.parse(localStorage.getItem('supabase.auth.token') || '{}');
+        if (authData.user) {
+          setUser(authData.user as User);
+          await loadPortfolio();
+          await loadOrders();
+          setLoading(false);
+          return;
         }
-        
-        console.log('Exchange: No session found, but not redirecting to prevent loop');
-        setLoading(false);
-        return;
       }
 
+      // Check regular Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      
       if (session) {
         setUser(session.user as User);
         await loadPortfolio();
         await loadOrders();
+        setLoading(false);
+        return;
       }
-      setLoading(false);
+
+      // No existing session - try to create Whop session bridge
+      try {
+        console.log('No session found, attempting Whop authentication bridge...');
+        const whopResponse = await fetch('/api/auth/whop-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (whopResponse.ok) {
+          const data = await whopResponse.json();
+          console.log('Whop session bridge successful:', data.user.id);
+
+          // Store session data
+          if (data.session) {
+            const authData = {
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+              expires_at: data.session.expires_at,
+              user: data.user
+            };
+
+            localStorage.setItem('supabase.auth.token', JSON.stringify(authData));
+            (window as any).supabaseSession = data.session;
+            
+            // Store Whop user ID for authentication
+            if (data.user.whop_user_id) {
+              localStorage.setItem('whop_user_id', data.user.whop_user_id);
+            }
+            
+            setUser(data.user as User);
+            await loadPortfolio();
+            await loadOrders();
+            setLoading(false);
+            return;
+          }
+        } else {
+          console.log('Whop authentication failed, redirecting to login');
+        }
+      } catch (error) {
+        console.error('Error with Whop authentication bridge:', error);
+      }
+
+      // If all authentication methods fail, redirect to login
+      router.push('/login');
     };
 
     checkAuth();
@@ -115,14 +149,9 @@ export default function ExchangePage() {
 
   const loadPortfolio = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: HeadersInit = {};
-      
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
-      
-      const response = await fetch('/api/paper-trading/portfolio', { headers });
+      const response = await fetch('/api/paper-trading/portfolio', { 
+        headers: getWhopAuthHeaders() 
+      });
       if (response.ok) {
         const data = await response.json();
         console.log('Portfolio data loaded:', data);
@@ -158,14 +187,9 @@ export default function ExchangePage() {
 
   const loadOrders = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: HeadersInit = {};
-      
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
-      
-      const response = await fetch('/api/paper-trading/orders', { headers });
+      const response = await fetch('/api/paper-trading/orders', { 
+        headers: getWhopAuthHeaders() 
+      });
       if (response.ok) {
         const data = await response.json();
         console.log('Orders loaded:', data.orders);
@@ -267,7 +291,7 @@ export default function ExchangePage() {
                 onClick={() => router.push('/leaderboard')}
                 className="px-3 py-1 text-sm bg-gray-800 hover:bg-gray-700 rounded"
               >
-                Leaderboard
+                Whop Leaderboard
               </button>
             </nav>
           </div>
