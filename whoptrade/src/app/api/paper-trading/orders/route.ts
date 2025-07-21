@@ -25,6 +25,19 @@ export async function GET(request: NextRequest) {
     // Create database client for queries
     const supabase = createDatabaseClient();
 
+    // Check if user is allowed to trade (prevent admin accounts from trading)
+    const { data: userProfile } = await supabase
+      .from('user_profiles')
+      .select('can_trade, role')
+      .eq('user_id', user.id)
+      .single();
+
+    if (userProfile && userProfile.can_trade === false) {
+      return NextResponse.json({ 
+        error: 'Trading not allowed for admin accounts due to conflict of interest' 
+      }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status'); // pending, filled, cancelled
     const symbol = searchParams.get('symbol');
@@ -120,6 +133,19 @@ export async function POST(request: NextRequest) {
 
     // Create database client for queries
     const supabase = createDatabaseClient();
+
+    // Check if user is allowed to trade (prevent admin accounts from trading)
+    const { data: userProfile } = await supabase
+      .from('user_profiles')
+      .select('can_trade, role')
+      .eq('user_id', user.id)
+      .single();
+
+    if (userProfile && userProfile.can_trade === false) {
+      return NextResponse.json({ 
+        error: 'Trading not allowed for admin accounts due to conflict of interest' 
+      }, { status: 403 });
+    }
 
     const body = await request.json();
     const {

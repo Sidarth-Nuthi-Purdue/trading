@@ -87,7 +87,40 @@ async function authenticateWhopUser(token: string): Promise<AuthResult> {
 
     if (createError) {
       console.error('Error creating Whop user via RPC:', createError);
-      return { user: null, error: 'Failed to create Whop user' };
+      
+      // Fallback: Try direct insert with service role (development only)
+      console.log('Trying fallback direct insert...');
+      const { data: fallbackUser, error: fallbackError } = await supabase
+        .from('user_profiles')
+        .insert({
+          user_id: userUuid,
+          whop_user_id: whopUserId,
+          email: `whop-${whopUserId}@whoptrade.internal`,
+          username: whopUserId,
+          first_name: whopUserId,
+          last_name: '',
+          role: 'member'
+        })
+        .select()
+        .single();
+        
+      if (fallbackError) {
+        console.error('Fallback creation also failed:', fallbackError);
+        return { user: null, error: 'Failed to create Whop user' };
+      }
+      
+      // Also create initial balance
+      await supabase
+        .from('user_balances')
+        .insert({
+          user_id: userUuid,
+          balance: 100000.00,
+          available_balance: 100000.00,
+          total_pnl: 0.00,
+          daily_pnl: 0.00,
+          weekly_pnl: 0.00,
+          monthly_pnl: 0.00
+        });
     }
 
     const user = {

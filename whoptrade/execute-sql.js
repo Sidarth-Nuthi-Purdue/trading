@@ -5,7 +5,7 @@ const { Client } = require('pg');
 
 async function main() {
   // Read the SQL file
-  const sqlFilePath = path.resolve(__dirname, '../virtual-trading-schema.sql');
+  const sqlFilePath = path.resolve(__dirname, './competitions-schema.sql');
   const sql = fs.readFileSync(sqlFilePath, 'utf8');
   
   // Create a PostgreSQL client

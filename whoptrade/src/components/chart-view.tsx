@@ -7,6 +7,8 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import TradingViewChart from './tradingview-chart';
+import StableChart from './stable-chart';
+import ChartErrorBoundary from './chart-error-boundary';
 import { Button } from '@/components/ui/button';
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/components/ui/use-toast';
@@ -32,6 +34,7 @@ const ChartView: React.FC<ChartViewProps> = ({
   const [price, setPrice] = useState<number | null>(null);
   const [quantity, setQuantity] = useState<string>('');
   const [activeTab, setActiveTab] = useState('market');
+  const [useStableChart, setUseStableChart] = useState(false);
 
   // Update currentSymbol when symbol prop changes
   useEffect(() => {
